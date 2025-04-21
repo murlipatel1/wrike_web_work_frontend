@@ -1,88 +1,140 @@
-"use client";
+'use client';
 
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import Cookies from 'js-cookie'; // Use js-cookie in client
 
-type User = {
-  email: string;
-  role: string;
-};
-
-type AuthContextType = {
-  user: User | null;
+interface AuthContextType {
   isAuthenticated: boolean;
+  user: {
+    _id: string;
+    email: string;
+    wrikeId: string;
+    webworkId: number;
+    createdAt: string | Date;
+  } | null;
   login: (email: string, password: string) => Promise<void>;
   logout: () => void;
-};
+  loading: boolean;
+  error: string | null;
+  clearError: () => void;
+}
 
 const AuthContext = createContext<AuthContextType>({
-  user: null,
   isAuthenticated: false,
+  user: null,
   login: async () => {},
   logout: () => {},
+  loading: false,
+  error: null,
+  clearError: () => {},
 });
 
 export const useAuth = () => useContext(AuthContext);
 
-export default function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+  const [user, setUser] = useState<AuthContextType['user']>(null);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
   const router = useRouter();
 
+  // Check authentication status on initial load
   useEffect(() => {
-    // Check if user is authenticated when component mounts
-    const storedAuth = localStorage.getItem('isAuthenticated');
-    const storedUser = localStorage.getItem('user');
-    
-    if (storedAuth === 'true' && storedUser) {
-      setIsAuthenticated(true);
-      setUser(JSON.parse(storedUser));
-    }
+    const checkAuth = async () => {
+      const token = Cookies.get('token');
+
+      if (!token) {
+        setIsAuthenticated(false);
+        setUser(null);
+        setLoading(false);
+        return;
+      }
+
+      try {
+        const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/api/auth/me`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          setUser(data.data);
+          setIsAuthenticated(true);
+        } else {
+          Cookies.remove('token');
+          setUser(null);
+          setIsAuthenticated(false);
+        }
+      } catch (err) {
+        console.error('Auth check error:', err);
+        Cookies.remove('token');
+        setIsAuthenticated(false);
+        setUser(null);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    checkAuth();
   }, []);
 
   const login = async (email: string, password: string) => {
-    // Check default admin credentials
-    if (email === 'admin' && password === 'admin') {
-      const user = { email, role: 'admin' };
-      localStorage.setItem('isAuthenticated', 'true');
-      localStorage.setItem('user', JSON.stringify(user));
-      setUser(user);
-      setIsAuthenticated(true);
-      return;
-    }
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/api/auth/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, password }),
+      });
 
-    // Make API request to login
-    const response = await fetch('/api/auth/login', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ email, password }),
-    });
-
-    if (!response.ok) {
       const data = await response.json();
-      throw new Error(data.message || 'Failed to login');
-    }
 
-    const data = await response.json();
-    localStorage.setItem('isAuthenticated', 'true');
-    localStorage.setItem('user', JSON.stringify(data.user));
-    setUser(data.user);
-    setIsAuthenticated(true);
+      if (!response.ok) {
+        throw new Error(data.error || 'Login failed');
+      }
+
+      // Store token in cookie (set expiration to match token expiry)
+      Cookies.set('token', data.token, { expires: data.expiresIn / (60 * 60 * 24) }); // expiresIn is in seconds
+
+      // Fetch user data
+      const userRes = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/api/auth/me`, {
+        headers: {
+          Authorization: `Bearer ${data.token}`,
+        },
+      });
+
+      if (!userRes.ok) throw new Error('Failed to get user data');
+
+      const userData = await userRes.json();
+      setUser(userData.data);
+      setIsAuthenticated(true);
+      router.push('/');
+    } catch (err) {
+      console.error('Login error:', err);
+      setError(err instanceof Error ? err.message : 'Login failed');
+      setIsAuthenticated(false);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const logout = () => {
-    localStorage.removeItem('isAuthenticated');
-    localStorage.removeItem('user');
-    setUser(null);
+    Cookies.remove('token');
     setIsAuthenticated(false);
+    setUser(null);
     router.push('/login');
   };
 
+  const clearError = () => setError(null);
+
   return (
-    <AuthContext.Provider value={{ user, isAuthenticated, login, logout }}>
+    <AuthContext.Provider value={{ isAuthenticated, user, login, logout, loading, error, clearError }}>
       {children}
     </AuthContext.Provider>
   );
-}
+};

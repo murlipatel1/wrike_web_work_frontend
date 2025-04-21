@@ -2,6 +2,7 @@
  * API utility functions
  */
 import { Task, User, ApiLog, Setting } from '../types';
+import { getAuthHeader } from './auth';
 
 // Base API configuration
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || '';
@@ -18,7 +19,9 @@ interface ApiListResponse<T> {
  */
 export async function fetchFromApi<T>(endpoint: string): Promise<T> {
   try {
-    const response = await fetch(`${API_BASE_URL}${endpoint}`);
+    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+      headers: new Headers(getAuthHeader() as Record<string, string>),
+    });
     
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
@@ -96,7 +99,7 @@ export const fetchDashboardData = async (): Promise<DashboardData> => {
     console.error('Error fetching dashboard data:', error);
     throw error;
   }
-};
+}
 
 /**
  * Post data to API
@@ -108,9 +111,9 @@ export async function postToApi<T, R>(endpoint: string, data: T): Promise<R> {
   try {
     const response = await fetch(`${API_BASE_URL}${endpoint}`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: 
+        new Headers(getAuthHeader() as Record<string, string>)
+      ,
       body: JSON.stringify(data),
     });
 
@@ -136,9 +139,7 @@ export async function updateApi<T, R>(endpoint: string, data: T): Promise<R> {
   try {
     const response = await fetch(`${API_BASE_URL}${endpoint}`, {
       method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers:  new Headers(getAuthHeader() as Record<string, string>),
       body: JSON.stringify(data),
     });
 
@@ -149,7 +150,7 @@ export async function updateApi<T, R>(endpoint: string, data: T): Promise<R> {
 
     return await response.json();
   } catch (error) {
-    console.error(`Error updating ${endpoint}:`, error);
+    console.error(`Error updating at ${endpoint}:`, error);
     throw error;
   }
 }
