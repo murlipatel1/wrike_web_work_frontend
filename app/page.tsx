@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { Task, User, ApiLog, Setting } from '../types';
-import { fetchDashboardData, postToApi, updateApi, deleteFromApi } from '../utils/api';
+import { fetchDashboardData, postToApi, updateApi, deleteFromApi, fetchFromApi } from '../utils/api';
 import { useAuth } from '../providers/AuthProvider';
 import { TrashIcon, PencilIcon, PlusIcon } from '../components/ui/icons';
 
@@ -29,6 +29,26 @@ export default function Dashboard() {
     webworkId: 0
   });
 
+  const [isDeleteTaskModalOpen, setIsDeleteTaskModalOpen] = useState(false);
+  const [currentTask, setCurrentTask] = useState<Task | null>(null);
+
+  const [isBatchSizeModalOpen, setIsBatchSizeModalOpen] = useState(false);
+  const [batchSize, setBatchSize] = useState<number>(0);
+
+  const [wrikeToken, setWrikeToken] = useState<string | null>(null);
+  const [webworkToken, setWebworkToken] = useState<string | null>(null);
+  const [webworkTokenExpiry, setWebworkTokenExpiry] = useState<{
+    daysRemaining: number;
+    updatedAt: string;
+    expiryDate: string;
+  } | null>(null);
+  const [showWrikeToken, setShowWrikeToken] = useState(false);
+  const [showWebworkToken, setShowWebworkToken] = useState(false);
+  const [isWrikeTokenModalOpen, setIsWrikeTokenModalOpen] = useState(false);
+  const [isWebworkTokenModalOpen, setIsWebworkTokenModalOpen] = useState(false);
+  const [newWrikeToken, setNewWrikeToken] = useState('');
+  const [newWebworkToken, setNewWebworkToken] = useState('');
+
   useEffect(() => {
     const loadDashboardData = async () => {
       try {
@@ -39,9 +59,14 @@ export default function Dashboard() {
         
         setTasks(tasksData);
         setUsers(usersData);
-        console.log(usersData);
         setApiLogs(apiLogsData);
         setSettings(settingsData);
+        
+        // Also fetch the batch size
+        await fetchBatchSize();
+        
+        // Fetch tokens
+        await fetchTokens();
       } catch (err) {
         console.error('Error fetching dashboard data:', err);
         setError('Failed to load dashboard data. Please try again later.');
@@ -95,6 +120,55 @@ export default function Dashboard() {
     }
   };
 
+  const handleDeleteTask = async () => {
+    if (!currentTask) return;
+    
+    try {
+      await deleteFromApi(`/api/tasks/${currentTask.webworkTaskId}`);
+      setIsDeleteTaskModalOpen(false);
+      setCurrentTask(null);
+      // Refresh tasks after deletion
+      const { tasks: refreshedTasks } = await fetchDashboardData();
+      setTasks(refreshedTasks);
+    } catch (error) {
+      console.error('Error deleting task:', error);
+    }
+  };
+
+  const fetchBatchSize = async () => {
+    try {
+      const response = await fetchFromApi<{success: boolean, data: {batchSize: number}}>('/api/settings/batch-size');
+      // Update to match the actual response structure where batchSize is directly in the data object
+      const size = response.data.batchSize;
+      setBatchSize(isNaN(size) ? 0 : size);
+      return size;
+    } catch (error) {
+      console.error('Error fetching batch size:', error);
+      return 0;
+    }
+  };
+
+  const handleEditBatchSize = () => {
+    fetchBatchSize().then(() => {
+      setIsBatchSizeModalOpen(true);
+    });
+  };
+
+  const handleUpdateBatchSize = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      // Update to match the expected payload structure for the API
+      await updateApi('/api/settings/batch-size', { batchSize: batchSize });
+      setIsBatchSizeModalOpen(false);
+      
+      // Refresh settings after update
+      const { settings: refreshedSettings } = await fetchDashboardData();
+      setSettings(refreshedSettings);
+    } catch (error) {
+      console.error('Error updating batch size:', error);
+    }
+  };
+
   const openEditModal = (user: User) => {
     setCurrentUser({...user});
     setIsEditModalOpen(true);
@@ -103,6 +177,76 @@ export default function Dashboard() {
   const openDeleteModal = (user: User) => {
     setCurrentUser({...user});
     setIsDeleteModalOpen(true);
+  };
+
+  const openDeleteTaskModal = (task: Task) => {
+    setCurrentTask({...task});
+    setIsDeleteTaskModalOpen(true);
+  };
+
+  const isWebworkTokenExpired = (): boolean => {
+    if (!webworkTokenExpiry || !webworkTokenExpiry.daysRemaining) return true;
+    return webworkTokenExpiry.daysRemaining <= 0;
+  };
+
+  const fetchTokens = async () => {
+    try {
+      // Fetch Wrike token
+      const wrikeResponse = await fetchFromApi<{ success: boolean, data: string }>('/api/tokens/wrike');
+      setWrikeToken(typeof wrikeResponse.data === 'string' ? wrikeResponse.data : JSON.stringify(wrikeResponse.data));
+
+      // Fetch Webwork token
+      const webworkResponse = await fetchFromApi<{ success: boolean, data: string }>('/api/tokens/webwork');
+      setWebworkToken(typeof webworkResponse.data === 'string' ? webworkResponse.data : JSON.stringify(webworkResponse.data));
+
+      // Fetch Webwork token expiry
+      const expiryResponse = await fetchFromApi<{ 
+        success: boolean, 
+        data: {
+          daysRemaining: number,
+          updatedAt: string,
+          expiryDate: string,
+        }
+      }>('/api/tokens/webwork/expiry');
+      
+      // Store the entire expiry data object
+      setWebworkTokenExpiry(expiryResponse.data);
+    } catch (error) {
+      console.error('Error fetching tokens:', error);
+    }
+  };
+
+  const handleUpdateWrikeToken = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await updateApi('/api/tokens/wrike', { token: newWrikeToken });
+      setIsWrikeTokenModalOpen(false);
+      setNewWrikeToken('');
+      await fetchTokens();
+    } catch (error) {
+      console.error('Error updating Wrike token:', error);
+    }
+  };
+
+  const handleUpdateWebworkToken = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await updateApi('/api/tokens/webwork', { token: newWebworkToken });
+      setIsWebworkTokenModalOpen(false);
+      setNewWebworkToken('');
+      await fetchTokens();
+    } catch (error) {
+      console.error('Error updating Webwork token:', error);
+    }
+  };
+
+  const copyToClipboard = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      alert('Copied to clipboard!');
+    } catch (err) {
+      console.error('Failed to copy: ', err);
+    }
   };
 
   const totalTasks = tasks.length;
@@ -176,6 +320,7 @@ export default function Dashboard() {
           <TabsTrigger value="users">Users</TabsTrigger>
           <TabsTrigger value="api-logs">API Logs</TabsTrigger>
           <TabsTrigger value="settings">Settings</TabsTrigger>
+          <TabsTrigger value="tokens">Tokens</TabsTrigger>
         </TabsList>
         
         <TabsContent value="tasks" className='text-black'>
@@ -195,6 +340,7 @@ export default function Dashboard() {
                       <th className="border p-2 text-left">End Date</th>
                       <th className="border p-2 text-left">Effort (hrs)</th>
                       <th className="border p-2 text-left">Time Spent (hrs)</th>
+                      <th className="border p-2 text-left">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -207,6 +353,16 @@ export default function Dashboard() {
                         <td className="border p-2">{new Date(task.wrikeEndDate).toLocaleDateString()}</td>
                         <td className="border p-2">{task.wrikeEffort}</td>
                         <td className="border p-2">{task.timeSpent}</td>
+                        <td className="border p-2">
+                          <div className="flex gap-2">
+                            <button 
+                              className="bg-red-500 hover:bg-red-700 text-white p-1 rounded"
+                              onClick={() => openDeleteTaskModal(task)}
+                            >
+                              <TrashIcon className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -307,7 +463,7 @@ export default function Dashboard() {
         
         <TabsContent value="settings" className='text-black'>
           <Card>
-            <CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle>System Settings</CardTitle>
             </CardHeader>
             <CardContent>
@@ -315,19 +471,154 @@ export default function Dashboard() {
                 <table className="w-full border-collapse">
                   <thead>
                     <tr className="bg-gray-100">
-                      <th className="border p-2 text-left">Key</th>
+                      <th className="border p-2 text-left">Setting</th>
                       <th className="border p-2 text-left">Value</th>
+                      <th className="border p-2 text-left">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {settings.map(setting => (
+                    {/* Display batch size regardless of whether it's in settings array */}
+                    <tr className="hover:bg-gray-50">
+                      <td className="border p-2">Batch Size</td>
+                      <td className="border p-2">{batchSize}</td>
+                      <td className="border p-2">
+                        <button 
+                          className="bg-blue-500 hover:bg-blue-700 text-white p-1 rounded"
+                          onClick={handleEditBatchSize}
+                        >
+                          <PencilIcon className="w-4 h-4" />
+                        </button>
+                      </td>
+                    </tr>
+                    {/* Display other settings */}
+                    {settings.filter(setting => setting.key !== 'batchSize').map(setting => (
                       <tr key={setting.key} className="hover:bg-gray-50">
                         <td className="border p-2">{setting.key}</td>
                         <td className="border p-2">{setting.value}</td>
+                        <td className="border p-2">-</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="tokens" className='text-black'>
+          <Card className="mb-6">
+            <CardHeader>
+              <CardTitle>Wrike Token</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-col gap-4">
+                <div className="flex items-center gap-4">
+                  <div className="font-medium w-full">
+                    {wrikeToken ? (
+                      <div className="flex items-center gap-2">
+                        <div className="overflow-hidden text-ellipsis line-clamp-2 break-all">
+                          {showWrikeToken ? wrikeToken : '••••••••••••••••••••'}
+                        </div>
+                        <button 
+                          className="text-blue-500 hover:text-blue-700 text-sm"
+                          onClick={() => setShowWrikeToken(!showWrikeToken)}
+                        >
+                          {showWrikeToken ? 'Hide' : 'Show'}
+                        </button>
+                        <button 
+                          className="text-green-500 hover:text-green-700 text-sm"
+                          onClick={() => wrikeToken && copyToClipboard(wrikeToken)}
+                          title="Copy to clipboard"
+                        >
+                          Copy
+                        </button>
+                      </div>
+                    ) : (
+                      <span className="text-red-500">No token available</span>
+                    )}
+                  </div>
+                  <button 
+                    className="bg-blue-500 hover:bg-blue-700 text-white p-2 rounded"
+                    onClick={() => setIsWrikeTokenModalOpen(true)}
+                  >
+                    <PencilIcon className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          
+          <Card className="mb-6">
+            <CardHeader>
+              <CardTitle>Webwork Token</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-col gap-4">
+                <div className="flex items-center gap-4">
+                  <div className="font-medium w-full">
+                    {webworkToken ? (
+                      <div className="flex items-center gap-2">
+                        <div className="overflow-hidden text-ellipsis line-clamp-2 break-all">
+                          {showWebworkToken ? webworkToken : '••••••••••••••••••••'}
+                        </div>
+                        <button 
+                          className="text-blue-500 hover:text-blue-700 text-sm"
+                          onClick={() => setShowWebworkToken(!showWebworkToken)}
+                        >
+                          {showWebworkToken ? 'Hide' : 'Show'}
+                        </button>
+                        <button 
+                          className="text-green-500 hover:text-green-700 text-sm"
+                          onClick={() => webworkToken && copyToClipboard(webworkToken)}
+                          title="Copy to clipboard"
+                        >
+                          Copy
+                        </button>
+                      </div>
+                    ) : (
+                      <span className="text-red-500">No token available</span>
+                    )}
+                  </div>
+                  <button 
+                    className="bg-blue-500 hover:bg-blue-700 text-white p-2 rounded"
+                    onClick={() => setIsWebworkTokenModalOpen(true)}
+                  >
+                    <PencilIcon className="w-4 h-4" />
+                  </button>
+                </div>
+                
+                <div className="mt-2">
+                  <div className="text-sm font-medium mb-1">Token Expiry:</div>
+                  <div className="flex items-center gap-2">
+                    {webworkTokenExpiry ? (
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium">Days Remaining:</span>
+                          <span>{webworkTokenExpiry.daysRemaining}</span>
+                          <span className={`px-2 py-0.5 text-xs rounded-full ${
+                            isWebworkTokenExpired() ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'
+                          }`}>
+                            {isWebworkTokenExpired() ? 'Expired' : 'Valid'}
+                          </span>
+                        </div>
+                        {webworkTokenExpiry.expiryDate && (
+                          <div>
+                            <span className="font-medium">Expiry Date:</span>{' '}
+                            {new Date(webworkTokenExpiry.expiryDate).toLocaleDateString()} {new Date(webworkTokenExpiry.expiryDate).toLocaleTimeString()}
+                          </div>
+                        )}
+                        {webworkTokenExpiry.updatedAt && (
+                          <div>
+                            <span className="font-medium">Last Updated:</span>{' '}
+                            {new Date(webworkTokenExpiry.updatedAt).toLocaleDateString()} {new Date(webworkTokenExpiry.updatedAt).toLocaleTimeString()}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-red-500">No expiry information available</span>
+                    )}
+                  </div>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -471,6 +762,147 @@ export default function Dashboard() {
                 Delete
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Task Confirmation Modal */}
+      {isDeleteTaskModalOpen && currentTask && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+            <h2 className="text-xl font-bold mb-4">Delete Task</h2>
+            <p className="mb-6">
+              Are you sure you want to delete task <span className="font-bold">#{currentTask.webworkTaskId}</span> for <span className="font-bold">{currentTask.email}</span>? 
+              This action cannot be undone.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded"
+                onClick={() => setIsDeleteTaskModalOpen(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded"
+                onClick={handleDeleteTask}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Batch Size Edit Modal */}
+      {isBatchSizeModalOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+            <h2 className="text-xl font-bold mb-4">Edit Batch Size</h2>
+            <form onSubmit={handleUpdateBatchSize}>
+              <div className="mb-6">
+                <label className="block text-gray-700 text-sm font-bold mb-2">Batch Size</label>
+                <input
+                  type="number"
+                  className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700"
+                  value={batchSize}
+                  onChange={(e) => setBatchSize(parseInt(e.target.value) || 0)}
+                  required
+                  min="1"
+                />
+                <p className="text-sm text-gray-600 mt-1">
+                  Number of tasks to process in each batch.
+                </p>
+              </div>
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded"
+                  onClick={() => setIsBatchSizeModalOpen(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
+                >
+                  Update
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Wrike Token Edit Modal */}
+      {isWrikeTokenModalOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+            <h2 className="text-xl font-bold mb-4">Update Wrike Token</h2>
+            <form onSubmit={handleUpdateWrikeToken}>
+              <div className="mb-6">
+                <label className="block text-gray-700 text-sm font-bold mb-2">New Token</label>
+                <textarea
+                  className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 h-32"
+                  value={newWrikeToken}
+                  onChange={(e) => setNewWrikeToken(e.target.value)}
+                  required
+                  placeholder="Enter the new Wrike token"
+                />
+              </div>
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded"
+                  onClick={() => setIsWrikeTokenModalOpen(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
+                >
+                  Update Token
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Webwork Token Edit Modal */}
+      {isWebworkTokenModalOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+            <h2 className="text-xl font-bold mb-4">Update Webwork Token</h2>
+            <form onSubmit={handleUpdateWebworkToken}>
+              <div className="mb-6">
+                <label className="block text-gray-700 text-sm font-bold mb-2">New Token</label>
+                <textarea
+                  className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 h-32"
+                  value={newWebworkToken}
+                  onChange={(e) => setNewWebworkToken(e.target.value)}
+                  required
+                  placeholder="Enter the new Webwork token"
+                />
+              </div>
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded"
+                  onClick={() => setIsWebworkTokenModalOpen(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
+                >
+                  Update Token
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

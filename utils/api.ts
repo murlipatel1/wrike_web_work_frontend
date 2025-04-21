@@ -16,7 +16,7 @@ interface ApiListResponse<T> {
 /**
  * Generic fetch function with error handling
  */
-async function fetchFromApi<T>(endpoint: string): Promise<T> {
+export async function fetchFromApi<T>(endpoint: string): Promise<T> {
   try {
     const response = await fetch(`${API_BASE_URL}${endpoint}`);
     
