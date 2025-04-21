@@ -20,10 +20,10 @@ export default function Dashboard() {
 
   useEffect(() => {
     // If not authenticated, redirect to login
-    if (!isAuthenticated) {
-      router.push('/login');
-      return;
-    }
+    // if (!isAuthenticated) {
+    //   router.push('/login');
+    //   return;
+    // }
 
     const loadDashboardData = async () => {
       try {
@@ -35,6 +35,7 @@ export default function Dashboard() {
         
         setTasks(tasksData);
         setUsers(usersData);
+        console.log(usersData);
         setApiLogs(apiLogsData);
         setSettings(settingsData);
       } catch (err) {
@@ -78,7 +79,7 @@ export default function Dashboard() {
       </div>
       
       {/* Dashboard Summary */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6 text-black">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium">Total Tasks</CardTitle>
@@ -125,7 +126,7 @@ export default function Dashboard() {
         </TabsList>
         
         {/* Tasks Tab */}
-        <TabsContent value="tasks">
+        <TabsContent value="tasks" className='text-black'>
           <Card>
             <CardHeader>
               <CardTitle>Task List</CardTitle>
@@ -164,7 +165,7 @@ export default function Dashboard() {
         </TabsContent>
         
         {/* Users Tab */}
-        <TabsContent value="users">
+        <TabsContent value="users" className='text-black'>
           <Card>
             <CardHeader>
               <CardTitle>User List</CardTitle>
@@ -197,7 +198,7 @@ export default function Dashboard() {
         </TabsContent>
         
         {/* API Logs Tab */}
-        <TabsContent value="api-logs">
+        <TabsContent value="api-logs" className='text-black'>
           <Card>
             <CardHeader>
               <CardTitle>API Call Logs</CardTitle>
@@ -232,7 +233,7 @@ export default function Dashboard() {
         </TabsContent>
         
         {/* Settings Tab */}
-        <TabsContent value="settings">
+        <TabsContent value="settings" className='text-black'>
           <Card>
             <CardHeader>
               <CardTitle>System Settings</CardTitle>

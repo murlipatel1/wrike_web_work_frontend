@@ -1,10 +1,17 @@
 /**
  * API utility functions
  */
-import { Task, User, ApiLog, Setting} from '../types';
+import { Task, User, ApiLog, Setting } from '../types';
 
 // Base API configuration
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || '';
+
+// Add response type interfaces
+interface ApiListResponse<T> {
+  success: boolean;
+  count: number;
+  data: T[];
+}
 
 /**
  * Generic fetch function with error handling
@@ -29,25 +36,37 @@ async function fetchFromApi<T>(endpoint: string): Promise<T> {
  * Fetch tasks from API
  * @returns Promise with an array of Task objects
  */
-export const fetchTasks = (): Promise<Task[]> => fetchFromApi<Task[]>('/api/tasks');
+export const fetchTasks = async (): Promise<Task[]> => {
+  const response = await fetchFromApi<ApiListResponse<Task>>('/api/tasks');
+  return response.data;
+};
 
 /**
  * Fetch users from API
  * @returns Promise with an array of User objects
  */
-export const fetchUsers = (): Promise<User[]> => fetchFromApi<User[]>('/api/users');
+export const fetchUsers = async (): Promise<User[]> => {
+  const response = await fetchFromApi<ApiListResponse<User>>('/api/users');
+  return response.data;
+};
 
 /**
  * Fetch API logs from API
  * @returns Promise with an array of ApiLog objects
  */
-export const fetchApiLogs = (): Promise<ApiLog[]> => fetchFromApi<ApiLog[]>('/api/api-logs');
+export const fetchApiLogs = async (): Promise<ApiLog[]> => {
+  const response = await fetchFromApi<ApiListResponse<ApiLog>>('/api/api-logs');
+  return response.data;
+};
 
 /**
  * Fetch settings from API
  * @returns Promise with an array of Setting objects
  */
-export const fetchSettings = (): Promise<Setting[]> => fetchFromApi<Setting[]>('/api/settings');
+// export const fetchSettings = async (): Promise<Setting[]> => {
+//   const response = await fetchFromApi<ApiListResponse<Setting>>('/api/settings');
+//   return response.data;
+// };
 
 /**
  * Interface for dashboard data returned from the API
@@ -65,14 +84,14 @@ interface DashboardData {
  */
 export const fetchDashboardData = async (): Promise<DashboardData> => {
   try {
-    const [tasks, users, apiLogs, settings] = await Promise.all([
+    const [tasks, users, apiLogs] = await Promise.all([
       fetchTasks(),
       fetchUsers(),
       fetchApiLogs(),
-      fetchSettings()
+      // fetchSettings()
     ]);
     
-    return { tasks, users, apiLogs, settings };
+    return { tasks, users, apiLogs, settings: [] }; // settings is currently empty
   } catch (error) {
     console.error('Error fetching dashboard data:', error);
     throw error;

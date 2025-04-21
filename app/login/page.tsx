@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 
@@ -10,6 +10,14 @@ export default function Login() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const router = useRouter();
+
+  // Check if already logged in
+  useEffect(() => {
+    const isAuthenticated = localStorage.getItem('isAuthenticated');
+    if (isAuthenticated === 'true') {
+      router.push('/');
+    }
+  }, [router]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -23,8 +31,10 @@ export default function Login() {
         localStorage.setItem('isAuthenticated', 'true');
         localStorage.setItem('user', JSON.stringify({ email, role: 'admin' }));
         
-        // Redirect to dashboard
-        router.push('/');
+        // Use a small timeout to ensure localStorage is updated before redirect
+        setTimeout(() => {
+          router.push('/');
+        }, 100);
         return;
       }
 
@@ -52,11 +62,26 @@ export default function Login() {
       router.push('/');
     } catch (err) {
       if (err instanceof Error) {
-      setError(err.message || 'Invalid email or password');
-        }
+        setError(err.message || 'Invalid email or password');
+      } else {
+        setError('Invalid email or password');
+      }
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleDefaultLogin = () => {
+    // For demo purposes - one-click admin login
+    setEmail('admin');
+    setPassword('admin');
+    
+    // Store authentication state
+    localStorage.setItem('isAuthenticated', 'true');
+    localStorage.setItem('user', JSON.stringify({ email: 'admin', role: 'admin' }));
+    
+    // Use window.location for a hard navigation instead of router.push
+    window.location.href = '/';
   };
 
   return (
@@ -100,13 +125,21 @@ export default function Login() {
                 required
               />
             </div>
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col gap-2">
               <button
                 className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline w-full"
                 type="submit"
                 disabled={loading}
               >
                 {loading ? 'Logging in...' : 'Login'}
+              </button>
+              
+              <button
+                className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline w-full"
+                type="button"
+                onClick={handleDefaultLogin}
+              >
+                Use Default Login (admin)
               </button>
             </div>
           </form>
