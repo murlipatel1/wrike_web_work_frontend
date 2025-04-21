@@ -5,8 +5,9 @@ import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { Task, User, ApiLog, Setting } from '../types';
-import { fetchDashboardData } from '../utils/api';
+import { fetchDashboardData, postToApi, updateApi, deleteFromApi } from '../utils/api';
 import { useAuth } from '../providers/AuthProvider';
+import { TrashIcon, PencilIcon, PlusIcon } from '../components/ui/icons';
 
 export default function Dashboard() {
   const { isAuthenticated, user, logout } = useAuth();
@@ -18,18 +19,21 @@ export default function Dashboard() {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    // If not authenticated, redirect to login
-    // if (!isAuthenticated) {
-    //   router.push('/login');
-    //   return;
-    // }
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [newUser, setNewUser] = useState({
+    email: '',
+    wrikeId: '',
+    webworkId: 0
+  });
 
+  useEffect(() => {
     const loadDashboardData = async () => {
       try {
         setLoading(true);
         
-        // Fetch all data using the utility function
         const { tasks: tasksData, users: usersData, apiLogs: apiLogsData, settings: settingsData } = 
           await fetchDashboardData();
         
@@ -49,13 +53,63 @@ export default function Dashboard() {
     loadDashboardData();
   }, [isAuthenticated, router]);
 
-  // Calculate stats
+  const handleAddUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await postToApi('/api/users', newUser);
+      setIsAddModalOpen(false);
+      setNewUser({ email: '', wrikeId: '', webworkId: 0 });
+      const { users: refreshedUsers } = await fetchDashboardData();
+      setUsers(refreshedUsers);
+    } catch (error) {
+      console.error('Error adding user:', error);
+    }
+  };
+
+  const handleEditUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentUser) return;
+    
+    try {
+      await updateApi(`/api/users/${currentUser._id}`, currentUser);
+      setIsEditModalOpen(false);
+      setCurrentUser(null);
+      const { users: refreshedUsers } = await fetchDashboardData();
+      setUsers(refreshedUsers);
+    } catch (error) {
+      console.error('Error updating user:', error);
+    }
+  };
+
+  const handleDeleteUser = async () => {
+    if (!currentUser) return;
+    
+    try {
+      await deleteFromApi(`/api/users/${currentUser._id}`);
+      setIsDeleteModalOpen(false);
+      setCurrentUser(null);
+      const { users: refreshedUsers } = await fetchDashboardData();
+      setUsers(refreshedUsers);
+    } catch (error) {
+      console.error('Error deleting user:', error);
+    }
+  };
+
+  const openEditModal = (user: User) => {
+    setCurrentUser({...user});
+    setIsEditModalOpen(true);
+  };
+
+  const openDeleteModal = (user: User) => {
+    setCurrentUser({...user});
+    setIsDeleteModalOpen(true);
+  };
+
   const totalTasks = tasks.length;
   const totalUsers = users.length;
   const tasksWithEffort = tasks.filter(task => task.wrikeEffort > 0).length;
   const completionRate = totalTasks > 0 ? Math.round((tasksWithEffort / totalTasks) * 100) : 0;
 
-  // Calculate total API calls
   const totalWrikeApiCalls = apiLogs.reduce((total, log) => total + (log.wrikeApiCalls || 0), 0);
   const totalWebworkApiCalls = apiLogs.reduce((total, log) => total + (log.webworkApiCalls || 0), 0);
   const totalDatabaseApiCalls = apiLogs.reduce((total, log) => total + (log.databaseApiCalls || 0), 0);
@@ -78,7 +132,6 @@ export default function Dashboard() {
         </div>
       </div>
       
-      {/* Dashboard Summary */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6 text-black">
         <Card>
           <CardHeader className="pb-2">
@@ -125,7 +178,6 @@ export default function Dashboard() {
           <TabsTrigger value="settings">Settings</TabsTrigger>
         </TabsList>
         
-        {/* Tasks Tab */}
         <TabsContent value="tasks" className='text-black'>
           <Card>
             <CardHeader>
@@ -164,11 +216,16 @@ export default function Dashboard() {
           </Card>
         </TabsContent>
         
-        {/* Users Tab */}
         <TabsContent value="users" className='text-black'>
           <Card>
-            <CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle>User List</CardTitle>
+              <button 
+                className="bg-green-500 hover:bg-green-700 text-white px-3 py-1 rounded flex items-center gap-1"
+                onClick={() => setIsAddModalOpen(true)}
+              >
+                <PlusIcon className="w-4 h-4" /> Add User
+              </button>
             </CardHeader>
             <CardContent>
               <div className="overflow-x-auto">
@@ -179,6 +236,7 @@ export default function Dashboard() {
                       <th className="border p-2 text-left">Wrike ID</th>
                       <th className="border p-2 text-left">Webwork ID</th>
                       <th className="border p-2 text-left">Created At</th>
+                      <th className="border p-2 text-left">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -188,6 +246,22 @@ export default function Dashboard() {
                         <td className="border p-2">{user.wrikeId}</td>
                         <td className="border p-2">{user.webworkId}</td>
                         <td className="border p-2">{new Date(user.createdAt).toLocaleString()}</td>
+                        <td className="border p-2">
+                          <div className="flex gap-2">
+                            <button 
+                              className="bg-blue-500 hover:bg-blue-700 text-white p-1 rounded"
+                              onClick={() => openEditModal(user)}
+                            >
+                              <PencilIcon className="w-4 h-4" />
+                            </button>
+                            <button 
+                              className="bg-red-500 hover:bg-red-700 text-white p-1 rounded"
+                              onClick={() => openDeleteModal(user)}
+                            >
+                              <TrashIcon className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -197,7 +271,6 @@ export default function Dashboard() {
           </Card>
         </TabsContent>
         
-        {/* API Logs Tab */}
         <TabsContent value="api-logs" className='text-black'>
           <Card>
             <CardHeader>
@@ -232,7 +305,6 @@ export default function Dashboard() {
           </Card>
         </TabsContent>
         
-        {/* Settings Tab */}
         <TabsContent value="settings" className='text-black'>
           <Card>
             <CardHeader>
@@ -261,6 +333,147 @@ export default function Dashboard() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Add User Modal */}
+      {isAddModalOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+            <h2 className="text-xl font-bold mb-4">Add New User</h2>
+            <form onSubmit={handleAddUser}>
+              <div className="mb-4">
+                <label className="block text-gray-700 text-sm font-bold mb-2">Email</label>
+                <input
+                  type="email"
+                  className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700"
+                  value={newUser.email}
+                  onChange={(e) => setNewUser({...newUser, email: e.target.value})}
+                  required
+                />
+              </div>
+              <div className="mb-4">
+                <label className="block text-gray-700 text-sm font-bold mb-2">Wrike ID</label>
+                <input
+                  type="text"
+                  className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700"
+                  value={newUser.wrikeId}
+                  onChange={(e) => setNewUser({...newUser, wrikeId: e.target.value})}
+                  required
+                />
+              </div>
+              <div className="mb-6">
+                <label className="block text-gray-700 text-sm font-bold mb-2">Webwork ID</label>
+                <input
+                  type="number"
+                  className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700"
+                  value={newUser.webworkId}
+                  onChange={(e) => setNewUser({...newUser, webworkId: parseInt(e.target.value)})}
+                  required
+                />
+              </div>
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded"
+                  onClick={() => setIsAddModalOpen(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded"
+                >
+                  Add User
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit User Modal */}
+      {isEditModalOpen && currentUser && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+            <h2 className="text-xl font-bold mb-4">Edit User</h2>
+            <form onSubmit={handleEditUser}>
+              <div className="mb-4">
+                <label className="block text-gray-700 text-sm font-bold mb-2">Email</label>
+                <input
+                  type="email"
+                  className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700"
+                  value={currentUser.email}
+                  onChange={(e) => setCurrentUser({...currentUser, email: e.target.value})}
+                  required
+                />
+              </div>
+              <div className="mb-4">
+                <label className="block text-gray-700 text-sm font-bold mb-2">Wrike ID</label>
+                <input
+                  type="text"
+                  className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700"
+                  value={currentUser.wrikeId}
+                  onChange={(e) => setCurrentUser({...currentUser, wrikeId: e.target.value})}
+                  required
+                />
+              </div>
+              <div className="mb-6">
+                <label className="block text-gray-700 text-sm font-bold mb-2">Webwork ID</label>
+                <input
+                  type="number"
+                  className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700"
+                  value={currentUser.webworkId}
+                  onChange={(e) => setCurrentUser({...currentUser, webworkId: parseInt(e.target.value)})}
+                  required
+                />
+              </div>
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded"
+                  onClick={() => setIsEditModalOpen(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
+                >
+                  Update User
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {isDeleteModalOpen && currentUser && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+            <h2 className="text-xl font-bold mb-4">Delete User</h2>
+            <p className="mb-6">
+              Are you sure you want to delete user <span className="font-bold">{currentUser.email}</span>? 
+              This action cannot be undone.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded"
+                onClick={() => setIsDeleteModalOpen(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded"
+                onClick={handleDeleteUser}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
