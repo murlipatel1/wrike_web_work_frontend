@@ -49,6 +49,55 @@ export default function Dashboard() {
   const [newWrikeToken, setNewWrikeToken] = useState('');
   const [newWebworkToken, setNewWebworkToken] = useState('');
 
+  // First, let's add state variables for the search filters
+  const [taskSearchEmail, setTaskSearchEmail] = useState<string>('');
+  const [userSearchEmail, setUserSearchEmail] = useState<string>('');
+
+  // Then add filter functions to filter the tasks and users
+  const filteredTasks = tasks.filter(task => 
+    task.email.toLowerCase().includes(taskSearchEmail.toLowerCase())
+  );
+
+  const filteredUsers = users.filter(user => 
+    user.email.toLowerCase().includes(userSearchEmail.toLowerCase())
+  );
+
+  // Add these state variables for API log filtering and pagination
+  const [apiLogDateFilter, setApiLogDateFilter] = useState<string>('');
+  const [apiLogPage, setApiLogPage] = useState<number>(1);
+  const [apiLogsPerPage] = useState<number>(20);
+
+  // Add filter and pagination functions
+  const filterApiLogs = () => {
+    if (!apiLogDateFilter) return apiLogs;
+    
+    const filterDate = new Date(apiLogDateFilter);
+    filterDate.setHours(0, 0, 0, 0); // Start of day
+    
+    const nextDay = new Date(filterDate);
+    nextDay.setDate(nextDay.getDate() + 1); // End of day
+    
+    return apiLogs.filter(log => {
+      const logDate = new Date(log.timestamp);
+      return logDate >= filterDate && logDate < nextDay;
+    });
+  };
+
+  const filteredApiLogs = filterApiLogs();
+
+  // Calculate totals based on filtered logs
+  const filteredWrikeApiCalls = filteredApiLogs.reduce((total, log) => total + (log.wrikeApiCalls || 0), 0);
+  const filteredWebworkApiCalls = filteredApiLogs.reduce((total, log) => total + (log.webworkApiCalls || 0), 0);
+  const filteredDatabaseApiCalls = filteredApiLogs.reduce((total, log) => total + (log.databaseApiCalls || 0), 0);
+
+  // Pagination logic
+  const indexOfLastLog = apiLogPage * apiLogsPerPage;
+  const indexOfFirstLog = indexOfLastLog - apiLogsPerPage;
+  const currentApiLogs = filteredApiLogs.slice(indexOfFirstLog, indexOfLastLog);
+  const totalPages = Math.ceil(filteredApiLogs.length / apiLogsPerPage);
+
+  const paginate = (pageNumber: number) => setApiLogPage(pageNumber);
+
   useEffect(() => {
     const loadDashboardData = async () => {
       try {
@@ -202,7 +251,7 @@ export default function Dashboard() {
       const webworkResponse = await fetchFromApi<{ success: boolean, data: {
         token: string,
       } }>('/api/tokens/webwork');
-      setWebworkToken(wrikeResponse.data.token !== null ? webworkResponse.data.token : JSON.stringify(webworkResponse.data.token));
+      setWebworkToken(wrikeResponse.data.token !== null ? webworkResponse.data.token : JSON.stringify(wrikeResponse.data.token));
 
       // Fetch Webwork token expiry
       const expiryResponse = await fetchFromApi<{ 
@@ -344,8 +393,26 @@ export default function Dashboard() {
         
         <TabsContent value="tasks" className='text-black'>
           <Card>
-            <CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle>Task List</CardTitle>
+              <div className="relative w-64">
+                <input
+                  type="text"
+                  placeholder="Search by email..."
+                  className="border rounded py-2 px-3 w-full pr-8"
+                  value={taskSearchEmail}
+                  onChange={(e) => setTaskSearchEmail(e.target.value)}
+                />
+                {taskSearchEmail && (
+                  <button 
+                    className="absolute right-2 top-2.5"
+                    onClick={() => setTaskSearchEmail('')}
+                    title="Clear search"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
             </CardHeader>
             <CardContent>
               <div className="overflow-x-auto">
@@ -363,27 +430,35 @@ export default function Dashboard() {
                     </tr>
                   </thead>
                   <tbody>
-                    {tasks.map(task => (
-                      <tr key={task.wrikeTaskId} className="hover:bg-gray-50">
-                        <td className="border p-2">{task.email}</td>
-                        <td className="border p-2">{task.wrikeTaskId}</td>
-                        <td className="border p-2">{task.webworkTaskId}</td>
-                        <td className="border p-2">{new Date(task.wrikeStartDate).toLocaleDateString()}</td>
-                        <td className="border p-2">{new Date(task.wrikeEndDate).toLocaleDateString()}</td>
-                        <td className="border p-2">{task.wrikeEffort}</td>
-                        <td className="border p-2">{task.timeSpent}</td>
-                        <td className="border p-2">
-                          <div className="flex gap-2">
-                            <button 
-                              className="bg-red-500 hover:bg-red-700 text-white p-1 rounded"
-                              onClick={() => openDeleteTaskModal(task)}
-                            >
-                              <TrashIcon className="w-4 h-4" />
-                            </button>
-                          </div>
+                    {filteredTasks.length > 0 ? (
+                      filteredTasks.map(task => (
+                        <tr key={task.wrikeTaskId} className="hover:bg-gray-50">
+                          <td className="border p-2">{task.email}</td>
+                          <td className="border p-2">{task.wrikeTaskId}</td>
+                          <td className="border p-2">{task.webworkTaskId}</td>
+                          <td className="border p-2">{new Date(task.wrikeStartDate).toLocaleDateString()}</td>
+                          <td className="border p-2">{new Date(task.wrikeEndDate).toLocaleDateString()}</td>
+                          <td className="border p-2">{task.wrikeEffort}</td>
+                          <td className="border p-2">{task.timeSpent}</td>
+                          <td className="border p-2">
+                            <div className="flex gap-2">
+                              <button 
+                                className="bg-red-500 hover:bg-red-700 text-white p-1 rounded"
+                                onClick={() => openDeleteTaskModal(task)}
+                              >
+                                <TrashIcon className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={8} className="border p-4 text-center text-gray-500">
+                          {taskSearchEmail ? 'No tasks found matching your search.' : 'No tasks available.'}
                         </td>
                       </tr>
-                    ))}
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -395,12 +470,32 @@ export default function Dashboard() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle>User List</CardTitle>
-              <button 
-                className="bg-green-500 hover:bg-green-700 text-white px-3 py-1 rounded flex items-center gap-1"
-                onClick={() => setIsAddModalOpen(true)}
-              >
-                <PlusIcon className="w-4 h-4" /> Add User
-              </button>
+              <div className="flex items-center gap-4">
+                <div className="relative w-64">
+                  <input
+                    type="text"
+                    placeholder="Search by email..."
+                    className="border rounded py-2 px-3 w-full pr-8"
+                    value={userSearchEmail}
+                    onChange={(e) => setUserSearchEmail(e.target.value)}
+                  />
+                  {userSearchEmail && (
+                    <button 
+                      className="absolute right-2 top-2.5"
+                      onClick={() => setUserSearchEmail('')}
+                      title="Clear search"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+                <button 
+                  className="bg-green-500 hover:bg-green-700 text-white px-3 py-1 rounded flex items-center gap-1"
+                  onClick={() => setIsAddModalOpen(true)}
+                >
+                  <PlusIcon className="w-4 h-4" /> Add User
+                </button>
+              </div>
             </CardHeader>
             <CardContent>
               <div className="overflow-x-auto">
@@ -415,30 +510,38 @@ export default function Dashboard() {
                     </tr>
                   </thead>
                   <tbody>
-                    {users.map(user => (
-                      <tr key={user._id} className="hover:bg-gray-50">
-                        <td className="border p-2">{user.email}</td>
-                        <td className="border p-2">{user.wrikeId}</td>
-                        <td className="border p-2">{user.webworkId}</td>
-                        <td className="border p-2">{new Date(user.createdAt).toLocaleString()}</td>
-                        <td className="border p-2">
-                          <div className="flex gap-2">
-                            <button 
-                              className="bg-blue-500 hover:bg-blue-700 text-white p-1 rounded"
-                              onClick={() => openEditModal(user)}
-                            >
-                              <PencilIcon className="w-4 h-4" />
-                            </button>
-                            <button 
-                              className="bg-red-500 hover:bg-red-700 text-white p-1 rounded"
-                              onClick={() => openDeleteModal(user)}
-                            >
-                              <TrashIcon className="w-4 h-4" />
-                            </button>
-                          </div>
+                    {filteredUsers.length > 0 ? (
+                      filteredUsers.map(user => (
+                        <tr key={user._id} className="hover:bg-gray-50">
+                          <td className="border p-2">{user.email}</td>
+                          <td className="border p-2">{user.wrikeId}</td>
+                          <td className="border p-2">{user.webworkId}</td>
+                          <td className="border p-2">{new Date(user.createdAt).toLocaleString()}</td>
+                          <td className="border p-2">
+                            <div className="flex gap-2">
+                              <button 
+                                className="bg-blue-500 hover:bg-blue-700 text-white p-1 rounded"
+                                onClick={() => openEditModal(user)}
+                              >
+                                <PencilIcon className="w-4 h-4" />
+                              </button>
+                              <button 
+                                className="bg-red-500 hover:bg-red-700 text-white p-1 rounded"
+                                onClick={() => openDeleteModal(user)}
+                              >
+                                <TrashIcon className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={5} className="border p-4 text-center text-gray-500">
+                          {userSearchEmail ? 'No users found matching your search.' : 'No users available.'}
                         </td>
                       </tr>
-                    ))}
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -448,10 +551,56 @@ export default function Dashboard() {
         
         <TabsContent value="api-logs" className='text-black'>
           <Card>
-            <CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle>API Call Logs</CardTitle>
+              <div className="flex items-center gap-4">
+                <div>
+                  <label className="block text-sm font-medium mb-1">Filter by Date</label>
+                  <input
+                    type="date"
+                    className="border rounded py-1 px-2"
+                    value={apiLogDateFilter}
+                    onChange={(e) => {
+                      setApiLogDateFilter(e.target.value);
+                      setApiLogPage(1); // Reset to first page on filter change
+                    }}
+                  />
+                </div>
+                {apiLogDateFilter && (
+                  <button 
+                    className="mt-6 text-xs text-gray-500 hover:text-gray-700"
+                    onClick={() => {
+                      setApiLogDateFilter('');
+                      setApiLogPage(1);
+                    }}
+                  >
+                    Clear Filter
+                  </button>
+                )}
+              </div>
             </CardHeader>
             <CardContent>
+              {/* API Call Summary Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                <div className="bg-blue-50 p-4 rounded-lg">
+                  <h3 className="text-sm font-medium text-blue-700">Wrike API Calls</h3>
+                  <p className="text-2xl font-bold text-blue-900">{filteredWrikeApiCalls}</p>
+                </div>
+                <div className="bg-green-50 p-4 rounded-lg">
+                  <h3 className="text-sm font-medium text-green-700">Webwork API Calls</h3>
+                  <p className="text-2xl font-bold text-green-900">{filteredWebworkApiCalls}</p>
+                </div>
+                <div className="bg-purple-50 p-4 rounded-lg">
+                  <h3 className="text-sm font-medium text-purple-700">Database API Calls</h3>
+                  <p className="text-2xl font-bold text-purple-900">{filteredDatabaseApiCalls}</p>
+                </div>
+                <div className="bg-gray-50 p-4 rounded-lg">
+                  <h3 className="text-sm font-medium text-gray-700">Total Calls</h3>
+                  <p className="text-2xl font-bold text-gray-900">{filteredWrikeApiCalls + filteredWebworkApiCalls + filteredDatabaseApiCalls}</p>
+                </div>
+              </div>
+
+              {/* Log data display */}
               <div className="overflow-x-auto">
                 <table className="w-full border-collapse">
                   <thead>
@@ -464,18 +613,83 @@ export default function Dashboard() {
                     </tr>
                   </thead>
                   <tbody>
-                    {apiLogs.map(log => (
-                      <tr key={log._id} className="hover:bg-gray-50">
-                        <td className="border p-2">{new Date(log.timestamp).toLocaleString()}</td>
-                        <td className="border p-2">{log.wrikeApiCalls}</td>
-                        <td className="border p-2">{log.webworkApiCalls}</td>
-                        <td className="border p-2">{log.databaseApiCalls}</td>
-                        <td className="border p-2">{log.wrikeApiCalls + log.webworkApiCalls + log.databaseApiCalls}</td>
+                    {currentApiLogs.length > 0 ? (
+                      currentApiLogs.map(log => (
+                        <tr key={log._id} className="hover:bg-gray-50">
+                          <td className="border p-2">{new Date(log.timestamp).toLocaleString()}</td>
+                          <td className="border p-2">{log.wrikeApiCalls}</td>
+                          <td className="border p-2">{log.webworkApiCalls}</td>
+                          <td className="border p-2">{log.databaseApiCalls}</td>
+                          <td className="border p-2">{log.wrikeApiCalls + log.webworkApiCalls + log.databaseApiCalls}</td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={5} className="border p-4 text-center text-gray-500">
+                          {apiLogDateFilter ? 'No logs found for the selected date.' : 'No logs available.'}
+                        </td>
                       </tr>
-                    ))}
+                    )}
                   </tbody>
                 </table>
               </div>
+
+              {/* Pagination controls */}
+              {filteredApiLogs.length > apiLogsPerPage && (
+                <div className="flex justify-between items-center mt-6">
+                  <div className="text-sm text-gray-500">
+                    Showing {indexOfFirstLog + 1} to {Math.min(indexOfLastLog, filteredApiLogs.length)} of {filteredApiLogs.length} logs
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      className={`px-3 py-1 border rounded ${apiLogPage === 1 ? 'text-gray-400 cursor-not-allowed' : 'hover:bg-gray-100'}`}
+                      onClick={() => apiLogPage > 1 && paginate(apiLogPage - 1)}
+                      disabled={apiLogPage === 1}
+                    >
+                      Previous
+                    </button>
+                    
+                    {/* Show page numbers */}
+                    <div className="flex gap-1">
+                      {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                        // Logic to determine which page numbers to show
+                        let pageNum;
+                        if (totalPages <= 5) {
+                          // Show all pages if 5 or fewer
+                          pageNum = i + 1;
+                        } else if (apiLogPage <= 3) {
+                          // Show first 5 pages
+                          pageNum = i + 1;
+                        } else if (apiLogPage >= totalPages - 2) {
+                          // Show last 5 pages
+                          pageNum = totalPages - 4 + i;
+                        } else {
+                          // Show current page and 2 pages before/after
+                          pageNum = apiLogPage - 2 + i;
+                        }
+                        
+                        return (
+                          <button
+                            key={pageNum}
+                            className={`px-3 py-1 border rounded ${pageNum === apiLogPage ? 'bg-blue-500 text-white' : 'hover:bg-gray-100'}`}
+                            onClick={() => paginate(pageNum)}
+                          >
+                            {pageNum}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    
+                    <button
+                      className={`px-3 py-1 border rounded ${apiLogPage === totalPages ? 'text-gray-400 cursor-not-allowed' : 'hover:bg-gray-100'}`}
+                      onClick={() => apiLogPage < totalPages && paginate(apiLogPage + 1)}
+                      disabled={apiLogPage === totalPages}
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
