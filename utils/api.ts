@@ -137,9 +137,14 @@ export async function postToApi<T, R>(endpoint: string, data: T): Promise<R> {
  */
 export async function updateApi<T, R>(endpoint: string, data: T): Promise<R> {
   try {
+    const headers = new Headers({
+      'Content-Type': 'application/json',
+      ...getAuthHeader() as Record<string, string>
+    });
+    
     const response = await fetch(`${API_BASE_URL}${endpoint}`, {
       method: 'PUT',
-      headers:  new Headers(getAuthHeader() as Record<string, string>),
+      headers: headers,
       body: JSON.stringify(data),
     });
 

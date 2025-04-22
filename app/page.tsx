@@ -192,12 +192,17 @@ export default function Dashboard() {
   const fetchTokens = async () => {
     try {
       // Fetch Wrike token
-      const wrikeResponse = await fetchFromApi<{ success: boolean, data: string }>('/api/tokens/wrike');
-      setWrikeToken(typeof wrikeResponse.data === 'string' ? wrikeResponse.data : JSON.stringify(wrikeResponse.data));
+      const wrikeResponse = await fetchFromApi<{ success: boolean, data: {
+        token: string,
+      } }>('/api/tokens/wrike');
+
+      setWrikeToken(wrikeResponse.data.token !== null  ? wrikeResponse.data.token : JSON.stringify(wrikeResponse.data.token));
 
       // Fetch Webwork token
-      const webworkResponse = await fetchFromApi<{ success: boolean, data: string }>('/api/tokens/webwork');
-      setWebworkToken(typeof webworkResponse.data === 'string' ? webworkResponse.data : JSON.stringify(webworkResponse.data));
+      const webworkResponse = await fetchFromApi<{ success: boolean, data: {
+        token: string,
+      } }>('/api/tokens/webwork');
+      setWebworkToken(wrikeResponse.data.token !== null ? webworkResponse.data.token : JSON.stringify(webworkResponse.data.token));
 
       // Fetch Webwork token expiry
       const expiryResponse = await fetchFromApi<{ 
@@ -219,6 +224,7 @@ export default function Dashboard() {
   const handleUpdateWrikeToken = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      // Send the token in the correct format expected by the controller
       await updateApi('/api/tokens/wrike', { token: newWrikeToken });
       setIsWrikeTokenModalOpen(false);
       setNewWrikeToken('');
@@ -231,6 +237,7 @@ export default function Dashboard() {
   const handleUpdateWebworkToken = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      // Send the token in the correct format expected by the controller
       await updateApi('/api/tokens/webwork', { token: newWebworkToken });
       setIsWebworkTokenModalOpen(false);
       setNewWebworkToken('');
@@ -247,6 +254,18 @@ export default function Dashboard() {
     } catch (err) {
       console.error('Failed to copy: ', err);
     }
+  };
+
+  const openWrikeTokenModal = () => {
+    // Populate the form with the existing token
+    setNewWrikeToken(wrikeToken || '');
+    setIsWrikeTokenModalOpen(true);
+  };
+
+  const openWebworkTokenModal = () => {
+    // Populate the form with the existing token
+    setNewWebworkToken(webworkToken || '');
+    setIsWebworkTokenModalOpen(true);
   };
 
   const totalTasks = tasks.length;
@@ -539,7 +558,7 @@ export default function Dashboard() {
                   </div>
                   <button 
                     className="bg-blue-500 hover:bg-blue-700 text-white p-2 rounded"
-                    onClick={() => setIsWrikeTokenModalOpen(true)}
+                    onClick={openWrikeTokenModal}
                   >
                     <PencilIcon className="w-4 h-4" />
                   </button>
@@ -581,7 +600,7 @@ export default function Dashboard() {
                   </div>
                   <button 
                     className="bg-blue-500 hover:bg-blue-700 text-white p-2 rounded"
-                    onClick={() => setIsWebworkTokenModalOpen(true)}
+                    onClick={openWebworkTokenModal}
                   >
                     <PencilIcon className="w-4 h-4" />
                   </button>
@@ -844,7 +863,7 @@ export default function Dashboard() {
               <div className="mb-6">
                 <label className="block text-gray-700 text-sm font-bold mb-2">New Token</label>
                 <textarea
-                  className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 h-32"
+                  className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 h-64"
                   value={newWrikeToken}
                   onChange={(e) => setNewWrikeToken(e.target.value)}
                   required
